@@ -19,3 +19,8 @@ The purpose of this program is for software conservation.
 3. Make sure to have vcruntime140
 
 If your are intending to use this on a non-Virtools game, you must use your own DLL injection method.
+
+
+### 3rd Party Software
+  * [feather-ini-parser](https://github.com/Turbine1991/cpp-feather-ini-parser)
+  * [Microsoft Detours](https://github.com/microsoft/Detours)

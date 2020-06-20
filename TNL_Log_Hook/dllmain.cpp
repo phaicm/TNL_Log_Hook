@@ -9,7 +9,7 @@
 //Third Party Libs
 #include "3rdparty\INI.h"
 #include "3rdparty\detours.h"
-#pragma comment(lib, "3rdparty\detours.lib")
+#pragma comment(lib, "3rdparty\\detours.lib")
 
 #include "virtools.h"
 
@@ -152,7 +152,28 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		ini.select("DEBUG");
 		if (ini.getAs<int>("DEBUG", "logprintf", 0) == 1)
 		{
-			logprintfAddress = FindPattern("Avatar.dll", "\xE9\xBF\x13\x0B\x00\xE9\x6A\x24\x0C\x00", "xxxxxxxxxx");
+			//The life of String to Char *
+			std::string logprintf_dll = ini.get("DEBUG", "logprintf_dll", "");
+			std::string logprintf_pattern = ini.get("DEBUG", "logprintf_pattern", "");
+			std::string logprintf_mask = ini.get("DEBUG", "logprintf_mask", "");
+
+			char *cstr_dll = new char[logprintf_dll.length() + 1];
+			char *cstr_pattern = new char[logprintf_pattern.length() + 1];
+			char *cstr_mask = new char[logprintf_mask.length() + 1];
+			strcpy_s(cstr_dll, logprintf_dll.length() + 1, logprintf_dll.c_str());
+			strcpy_s(cstr_pattern, logprintf_pattern.length() + 1, logprintf_pattern.c_str());
+			strcpy_s(cstr_mask, logprintf_mask.length() + 1, logprintf_mask.c_str());
+
+			ofs << "logprintf_dll: " << logprintf_dll << std::endl;
+			ofs << "logprintf_pattern: " << logprintf_pattern << std::endl;
+			ofs << "logprintf_mask: " << logprintf_mask << std::endl;
+
+			logprintfAddress = FindPattern(cstr_dll, cstr_pattern, cstr_mask);
+
+			delete[] cstr_dll;
+			delete[] cstr_pattern;
+			delete[] cstr_mask;
+
 			ofs << "logprintfAddress: 0x" << std::hex << logprintfAddress << std::endl;
 			DetourTransactionBegin();
 			DetourUpdateThread(GetCurrentThread());
@@ -191,6 +212,7 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		}
 
 		ofs << "============TNL_Log_Hook END============" << std::endl;
+		ofs.close();
 	}
 	return TRUE;
 }
