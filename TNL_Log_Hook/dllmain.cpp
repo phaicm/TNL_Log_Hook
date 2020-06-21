@@ -24,7 +24,7 @@ std::ofstream ofs;
 	Helper Functions
 */
 
-DWORD FindPattern(char *module, char *pattern, char *mask)
+DWORD FindPattern(const char *module, char *pattern, const char *mask)
 {
 	MODULEINFO mInfo;
 	GetModuleInformation(GetCurrentProcess(), GetModuleHandle(module), &mInfo, sizeof(MODULEINFO));
@@ -135,15 +135,20 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		INI ini("TNL_HOOK.ini", true);
 
 		//Output File Initialization
-		std::ostringstream tempfilepath;
-		char* buf = nullptr;
-		size_t sz = 0;
-		if (_dupenv_s(&buf, &sz, "UserProfile") == 0 && buf != nullptr)
+		ini.select("DEBUG");
+
+		if (ini.getAs<int>("DEBUG", "outputfile", 0) == 1)
 		{
-			tempfilepath << buf << "\\Desktop\\TNLLogHook.txt";
-			free(buf);
+			std::ostringstream tempfilepath;
+			char* buf = nullptr;
+			size_t sz = 0;
+			if (_dupenv_s(&buf, &sz, "UserProfile") == 0 && buf != nullptr)
+			{
+				tempfilepath << buf << "\\TNLLogHook.txt";
+				free(buf);
+			}
+			ofs.open(tempfilepath.str(), std::ofstream::out);
 		}
-		ofs.open(tempfilepath.str(), std::ofstream::out);
 		
 		ofs << "============TNL_Log_Hook START============" << std::endl;
 
@@ -168,20 +173,11 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 			}
 			reinterpret_cast<char*> (&bytes[0]);
 
-			char *cstr_dll = new char[strlen(logprintf_dll.c_str()) + 1];
-			char *cstr_mask = new char[strlen(logprintf_mask.c_str()) + 1];
-
-			strcpy_s(cstr_dll, strlen(logprintf_dll.c_str()) + 1, logprintf_dll.c_str());
-			strcpy_s(cstr_mask, strlen(logprintf_mask.c_str()) + 1, logprintf_mask.c_str());
-
 			ofs << "logprintf_dll: " << logprintf_dll << std::endl;
 			ofs << "logprintf_pattern: " << logprintf_pattern << std::endl;
 			ofs << "logprintf_mask: " << logprintf_mask << std::endl;
 
-			logprintfAddress = FindPattern(cstr_dll, reinterpret_cast<char*> (&bytes[0]), cstr_mask);
-
-			delete[] cstr_dll;
-			delete[] cstr_mask;
+			logprintfAddress = FindPattern(logprintf_dll.c_str(), reinterpret_cast<char*> (&bytes[0]), logprintf_mask.c_str());
 
 			ofs << "logprintfAddress: 0x" << std::hex << logprintfAddress << std::endl;
 			DetourTransactionBegin();
