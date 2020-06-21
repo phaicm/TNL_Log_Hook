@@ -171,7 +171,6 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 			{
 				bytes.push_back(c);
 			}
-			reinterpret_cast<char*> (&bytes[0]);
 
 			ofs << "logprintf_dll: " << logprintf_dll << std::endl;
 			ofs << "logprintf_pattern: " << logprintf_pattern << std::endl;
