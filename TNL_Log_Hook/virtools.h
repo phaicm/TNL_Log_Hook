@@ -49,7 +49,7 @@ extern "C" __declspec(dllexport) Fake_CKPluginInfo* CKGetPluginInfo(int Index)
 	myPlugin.m_Version = 0x000001;
 	myPlugin.m_InitInstanceFct = NULL;
 	myPlugin.m_ExitInstanceFct = NULL;
-	myPlugin.m_GUID[0] = 0x123456789;
+	myPlugin.m_GUID[0] = 0x12345678;
 	myPlugin.m_GUID[1] = 0x12345679;
 	myPlugin.m_Summary_m_Buffer = "FakePlugin";
 	return &myPlugin;
