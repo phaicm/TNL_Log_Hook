@@ -23,6 +23,7 @@ std::ofstream ofs;
 /*
 	Helper Functions
 */
+
 DWORD FindPattern(char *module, char *pattern, char *mask)
 {
 	MODULEINFO mInfo;
@@ -157,21 +158,29 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 			std::string logprintf_pattern = ini.get("DEBUG", "logprintf_pattern", "");
 			std::string logprintf_mask = ini.get("DEBUG", "logprintf_mask", "");
 
-			char *cstr_dll = new char[logprintf_dll.length() + 1];
-			char *cstr_pattern = new char[logprintf_pattern.length() + 1];
-			char *cstr_mask = new char[logprintf_mask.length() + 1];
-			strcpy_s(cstr_dll, logprintf_dll.length() + 1, logprintf_dll.c_str());
-			strcpy_s(cstr_pattern, logprintf_pattern.length() + 1, logprintf_pattern.c_str());
-			strcpy_s(cstr_mask, logprintf_mask.length() + 1, logprintf_mask.c_str());
+			//Convert hex string to array byte
+			std::istringstream hex_chars_stream(logprintf_pattern);
+			std::vector<unsigned char> bytes;
+			unsigned int c;
+			while (hex_chars_stream >> std::hex >> c)
+			{
+				bytes.push_back(c);
+			}
+			reinterpret_cast<char*> (&bytes[0]);
+
+			char *cstr_dll = new char[strlen(logprintf_dll.c_str()) + 1];
+			char *cstr_mask = new char[strlen(logprintf_mask.c_str()) + 1];
+
+			strcpy_s(cstr_dll, strlen(logprintf_dll.c_str()) + 1, logprintf_dll.c_str());
+			strcpy_s(cstr_mask, strlen(logprintf_mask.c_str()) + 1, logprintf_mask.c_str());
 
 			ofs << "logprintf_dll: " << logprintf_dll << std::endl;
 			ofs << "logprintf_pattern: " << logprintf_pattern << std::endl;
 			ofs << "logprintf_mask: " << logprintf_mask << std::endl;
 
-			logprintfAddress = FindPattern(cstr_dll, cstr_pattern, cstr_mask);
+			logprintfAddress = FindPattern(cstr_dll, reinterpret_cast<char*> (&bytes[0]), cstr_mask);
 
 			delete[] cstr_dll;
-			delete[] cstr_pattern;
 			delete[] cstr_mask;
 
 			ofs << "logprintfAddress: 0x" << std::hex << logprintfAddress << std::endl;
