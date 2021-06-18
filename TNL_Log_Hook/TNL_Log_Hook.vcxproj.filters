@@ -27,4 +27,7 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\TNL_HOOK.ini" />
+  </ItemGroup>
 </Project>

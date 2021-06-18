@@ -6,16 +6,24 @@
 #include <Psapi.h>
 #include <string>
 
-//Third Party Libs
+/*
+	Third Party Libraries
+*/
+
 #include "3rdparty\INI.h"
 #include "3rdparty\detours.h"
 #pragma comment(lib, "3rdparty\\detours.lib")
+
+/*
+	Custom Headers
+*/
 
 #include "virtools.h"
 
 /*
 	Globals
 */
+
 DWORD logprintfAddress = 0;
 std::ofstream ofs;
 
@@ -72,10 +80,9 @@ BOOL InstallSystemHook(LPCTSTR dllname, LPCSTR exportname, VOID *ProxyFunction, 
 	{
 		DetourTransactionCommit();
 		result = TRUE;
+		ofs << "Hooked: " << exportname << "@" << dllname << std::endl;
 	}
 	else DetourTransactionAbort();
-
-	ofs << "Hooked: " << exportname << "@" << dllname << std::endl;
 
 	return result;
 }
@@ -104,9 +111,9 @@ void Hook_logprintf(const char *format, ...)
 
 //wininet.dll InternetConnectA
 typedef HINTERNET(WINAPI *tInternetConnectA)(HINTERNET hInternet, LPCSTR lpszServerName, INTERNET_PORT nServerPort, LPCSTR lpszUserName, LPCSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext);
-tInternetConnectA OrigInternetConnectA = NULL;
+tInternetConnectA Orig_InternetConnectA = NULL;
 
-HINTERNET WINAPI MyInternetConnectA(HINTERNET hInternet, LPCSTR lpszServerName, INTERNET_PORT nServerPort, LPCSTR lpszUserName, LPCSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext)
+HINTERNET WINAPI my_InternetConnectA(HINTERNET hInternet, LPCSTR lpszServerName, INTERNET_PORT nServerPort, LPCSTR lpszUserName, LPCSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext)
 {
 	LPCSTR newServerName = lpszServerName;
 	INI ini("TNL_HOOK.ini", true);
@@ -116,10 +123,33 @@ HINTERNET WINAPI MyInternetConnectA(HINTERNET hInternet, LPCSTR lpszServerName, 
 	if (lstrcmp(redirectServerName, "") != 0)
 	{
 		newServerName = redirectServerName;
-		ofs << "Redirecting " << lpszServerName << "-->" << redirectServerName << std::endl;;
+		ofs << "[HTTP_Redirect] Redirecting " << lpszServerName << "-->" << redirectServerName << std::endl;
+		return Orig_InternetConnectA(hInternet, newServerName, nServerPort, lpszUserName, lpszPassword, dwService, dwFlags, dwContext);
 	}
-		
-	return OrigInternetConnectA(hInternet, newServerName, nServerPort, lpszUserName, lpszPassword, dwService, dwFlags, dwContext);
+
+	ofs << "[HTTP_Redirect] No redirect for " << lpszServerName << std::endl;
+	return Orig_InternetConnectA(hInternet, newServerName, nServerPort, lpszUserName, lpszPassword, dwService, dwFlags, dwContext);
+}
+
+//ws2_32.dll gethostbyname
+typedef hostent* (WINAPI *tgethostbyname)(const char* name);
+tgethostbyname Orig_gethostbyname = NULL;
+
+hostent * WINAPI my_gethostbyname(const char *name)
+{
+	INI ini("TNL_HOOK.ini", true);
+	ini.select("HostName_Redirect");
+
+	LPCSTR redirectServerName = ini.getAs<LPCSTR>("HostName_Redirect", name, "");
+
+	if (lstrcmp(redirectServerName, "") != 0)
+	{
+		ofs << "[HostName_Redirect] Redirecting " << name << "-->" << redirectServerName << std::endl;
+		return Orig_gethostbyname(redirectServerName);
+	}
+
+	ofs << "[HostName_Redirect] No redirect for " << name << std::endl;
+	return Orig_gethostbyname(name);
 }
 
 
@@ -178,20 +208,32 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 
 			logprintfAddress = FindPattern(logprintf_dll.c_str(), reinterpret_cast<char*> (&bytes[0]), logprintf_mask.c_str());
 
-			ofs << "logprintfAddress: 0x" << std::hex << logprintfAddress << std::endl;
-			DetourTransactionBegin();
-			DetourUpdateThread(GetCurrentThread());
-			DetourAttach(&(LPVOID&)logprintfAddress, &Hook_logprintf);
-			DetourTransactionCommit();
+			if (logprintfAddress != NULL)
+			{
+				ofs << "logprintfAddress: 0x" << std::hex << logprintfAddress << std::endl;
+				DetourTransactionBegin();
+				DetourUpdateThread(GetCurrentThread());
+				if (DetourAttach(&(LPVOID&)logprintfAddress, &Hook_logprintf) == NO_ERROR)
+				{
+					DetourTransactionCommit();
+					ofs << "Hooked: - logprintf" << std::endl;
+				}
+			}
+
 		}
 		
 		ini.select("HTTP_Redirect");
 		if (ini.getAs<int>("HTTP_Redirect", "Redirect", 0) == 1)
 		{
-			InstallSystemHook("wininet.dll", "InternetConnectA", *MyInternetConnectA, (LPVOID*)&OrigInternetConnectA);
+			InstallSystemHook("wininet.dll", "InternetConnectA", *my_InternetConnectA, (LPVOID*)&Orig_InternetConnectA);
+		}
+
+		ini.select("HostName_Redirect");
+		if (ini.getAs<int>("HostName_Redirect", "Redirect", 0) == 1)
+		{
+			InstallSystemHook("ws2_32.dll", "gethostbyname", *my_gethostbyname, (LPVOID*)&Orig_gethostbyname);
 		}
 	}
-
 	else if (dwReason == DLL_PROCESS_DETACH)
 	{
 		INI ini("TNL_HOOK.ini", true);
@@ -202,7 +244,10 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		{
 			DetourTransactionBegin();
 			DetourUpdateThread(GetCurrentThread());
-			DetourDetach(&(LPVOID&)logprintfAddress, &Hook_logprintf);
+			if (DetourDetach(&(LPVOID&)logprintfAddress, &Hook_logprintf) == NO_ERROR) 
+			{
+				ofs << "Unhooked: logprintf - Sucess" << std::endl;
+			}
 			DetourTransactionCommit();
 		}
 
@@ -211,7 +256,22 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 		{
 			DetourTransactionBegin();
 			DetourUpdateThread(GetCurrentThread());
-			DetourDetach(&(LPVOID&)OrigInternetConnectA, &MyInternetConnectA);
+			if (DetourDetach(&(LPVOID&)Orig_InternetConnectA, &my_InternetConnectA) == NO_ERROR)
+			{
+				ofs << "Unhooked: InternetConnectA - Sucess" << std::endl;
+			}
+			DetourTransactionCommit();
+		}
+
+		ini.select("HostName_Redirect");
+		if (ini.getAs<int>("HostName_Redirect", "Redirect", 0) == 1)
+		{
+			DetourTransactionBegin();
+			DetourUpdateThread(GetCurrentThread());
+			if (DetourDetach(&(LPVOID&)Orig_gethostbyname, &my_gethostbyname) == NO_ERROR)
+			{
+				ofs << "Unhooked: gethostbyname - Sucess" << std::endl;
+			}
 			DetourTransactionCommit();
 		}
 
